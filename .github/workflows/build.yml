@@ -1,0 +1,97 @@
+name: Build NetTest APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.24.5"
+  FLET_VERSION: "0.25.2"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Flet ${{ env.FLET_VERSION }}
+        run: |
+          pip install --upgrade pip
+          pip install flet==${{ env.FLET_VERSION }}
+
+      - name: Instalar dependências do sistema
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libglu1-mesa \
+            ninja-build \
+            libgtk-3-dev \
+            curl \
+            unzip
+
+      - name: Configurar Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Desativar analytics do Flutter
+        run: flutter config --no-analytics
+
+      - name: Aceitar licenças Android
+        run: yes | flutter doctor --android-licenses || true
+
+      - name: Verificar ambiente
+        run: |
+          python --version
+          flutter --version
+          flet --version
+          java -version
+
+      - name: Cache pub (Flutter)
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Build APK
+        run: |
+          flet build apk \
+            --project "NetTest" \
+            --org "com.nettest" \
+            --build-number 1 \
+            --build-version "1.0.0" \
+            --verbose
+
+      - name: Localizar APK gerado
+        run: |
+          echo "=== Arquivos APK encontrados ==="
+          find . -name "*.apk" 2>/dev/null
+          ls -lh build/apk/ 2>/dev/null || true
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetTest-APK
+          path: |
+            build/apk/*.apk
+          if-no-files-found: warn
+          retention-days: 30
